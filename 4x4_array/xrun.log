@@ -1,0 +1,14 @@
+xrun: 23.09-s001: (c) Copyright 1995-2023 Cadence Design Systems, Inc.
+TOOL:	xrun	23.09-s001: Started on Jan 10, 2025 at 14:20:11 +07
+xrun
+	PE.v
+
+Trying to check out license...
+	Xcelium_Limited_Single_Core 23.00 - Failed
+	Xcelium_Single_Core 23.00 - Failed
+	Xcelium_Safety_Sim 23.00 - Failed
+	Xcelium_Safety 23.00 - Failed
+	Xcelium_Multi_Core 23.00 - Failed
+	Xcelium_For_Partners 23.00 - Failed
+xmsim: *F,NOLICN: Unable to checkout license for the simulation. 'lic_error LMF-03015'.
+TOOL:	xrun	23.09-s001: Exiting on Jan 10, 2025 at 14:20:47 +07  (total: 00:00:36)
