@@ -8,7 +8,8 @@ module main_controller #(
     input rst_n,
     input start,
     output reg load_wgt, load_ifm,
-    output reg ifm_RF_valid_1, ifm_RF_valid_2, wgt_RF_valid;
+    output reg ifm_RF_valid_1, ifm_RF_valid_2;
+    output reg [SYSTOLIC_SIZE - 1 : 0] wgt_RF_valid;
     output reg reset_pe;
     output reg select_wgt;
     output reg select_mux_ifm, select_demux_ifm;
