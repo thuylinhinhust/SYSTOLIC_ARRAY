@@ -48,7 +48,7 @@ module main_controller #(
             LOAD_WEIGHT:        if (count_load == NO_CYCLE_LOAD + 2)         next_state = LOAD_COMPUTE;
             LOAD_COMPUTE:       if (count_compute_1 == NO_CYCLE_COMPUTE + 2) next_state = LOAD_COMPUTE_WRITE;
             LOAD_COMPUTE_WRITE: if (count_tiling == 64)                   next_state = COMPUTE_WRITE;   // 414*26 = 10764
-            COMPUTE_WRITE:      if (count_compute_1 == NO_CYCLE_COMPUTE) next_state = WRITE;
+            COMPUTE_WRITE:      if (count_compute_1 == NO_CYCLE_COMPUTE + 2) next_state = WRITE;
             WRITE: begin 
                 if      (count_write == SYSTOLIC_SIZE + 1 && count_filter < NO_LOAD_FILTER) next_state = LOAD_WEIGHT;
                 else if (count_write == SYSTOLIC_SIZE + 1)                                  next_state = IDLE;
@@ -144,7 +144,7 @@ module main_controller #(
                     count_compute_1 <= 0;
 
                     count_compute_2 <= (count_compute_2 == NO_CYCLE_COMPUTE + 1) ? 0 : count_compute_2 + 1;
-                    count_tiling    <= (count_compute_2 == NO_CYCLE_COMPUTE - 1) ? count_tiling + 1 : count_tiling;
+                    count_tiling    <= (count_compute_2 == NO_CYCLE_COMPUTE ) ? count_tiling + 1 : count_tiling;
 
                     load_ifm          <= (count_compute_2 < NO_CYCLE_LOAD) ? 1 : 0;
                     load_wgt          <= 0;
@@ -179,7 +179,8 @@ module main_controller #(
                     end
 
                     select_wgt   <= 0;
-                    reset_pe     <= (count_compute_1 >= NO_CYCLE_COMPUTE - 2) ? 1 : 0;
+                    reset_pe     <= 0;
+                    //reset_pe     <= (count_compute_1 == NO_CYCLE_COMPUTE) ? 1 : 0;
                     write_out_en <= (count_compute_1 <= SYSTOLIC_SIZE    - 1) ? 1 : 0;
                 end
                 WRITE: begin

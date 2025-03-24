@@ -62,7 +62,7 @@ end
                     $fwrite(file, "%0d ", $signed(dut.dpram_ofm.mem[i * 32 + j]));  
                 end
                 $fwrite(file, "\n");
-                if((i % 32) == 0) $fwrite(file, "\n");
+                if((i % 32) == 0 && i != 0) $fwrite(file, "\n");
             end
             $fclose(file);
     end
