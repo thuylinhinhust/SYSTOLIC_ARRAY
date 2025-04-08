@@ -10,8 +10,9 @@ parameter KERNEL_SIZE   = 3   ;
 parameter NO_FILTER     = 16  ;
 
 localparam OFM_SIZE           = IFM_SIZE - KERNEL_SIZE + 1 ;
-localparam NO_TILING_PER_LINE = IFM_SIZE / SYSTOLIC_SIZE;
-localparam NO_TILING          = NO_TILING_PER_LINE * OFM_SIZE;
+localparam OFM_SIZE_POOLING   = OFM_SIZE / 2 ;
+localparam NO_TILING_PER_LINE = (OFM_SIZE  + SYSTOLIC_SIZE - 1) / SYSTOLIC_SIZE ;
+localparam NO_TILING          = NO_TILING_PER_LINE * OFM_SIZE ;
 
 reg  clk   ;
 reg  rst_n ;
@@ -36,16 +37,16 @@ TOP #(
 
 //read text files
 initial begin
-    $readmemb ("./ifm_bin_c3xh34xw34.txt", dut.dpram_ifm.mem);
+    $readmemb ("./ifm_bin_c3xh34xw34_copy.txt", dut.dpram_ifm.mem);
 end
 
 initial begin
-    $readmemb ("./weight_bin_co16xci3xk3xk3.txt", dut.dpram_wgt.mem);
+    $readmemb ("./weight_bin_co16xci3xk3xk3_copy.txt", dut.dpram_wgt.mem);
 end
 
-reg [DATA_WIDTH*2 - 1 : 0] ofm_golden [OFM_SIZE * OFM_SIZE * NO_FILTER - 1 : 0];
+reg [DATA_WIDTH*2 - 1 : 0] ofm_golden [OFM_SIZE_POOLING * OFM_SIZE_POOLING * NO_FILTER - 1 : 0];
 initial begin
-	$readmemb ("./ofm_bin_c16xh32xw32.txt", ofm_golden);
+	$readmemb ("./pooled_ofm_bin_c16xh16xw16.txt", ofm_golden);
 end
 
 initial begin
@@ -73,12 +74,12 @@ integer file;
 initial begin
     wait (done)
     file = $fopen ("output_matrix.txt", "w");
-        for (i = 0; i < OFM_SIZE * NO_FILTER; i = i + 1) begin
-            for (j = 0; j < OFM_SIZE; j = j + 1) begin
-                $fwrite (file, "%0d ", $signed(dut.dpram_ofm.mem[i * OFM_SIZE + j]));  
+        for (i = 0; i < OFM_SIZE_POOLING * NO_FILTER; i = i + 1) begin
+            for (j = 0; j < OFM_SIZE_POOLING; j = j + 1) begin
+                $fwrite (file, "%0d ", $signed(dut.dpram_ofm.mem[i * OFM_SIZE_POOLING + j]));  
             end
             $fwrite (file, "\n");
-            if ( (i + 1) % OFM_SIZE == 0 ) $fwrite (file, "\n");
+            if ( (i + 1) % OFM_SIZE_POOLING == 0 ) $fwrite (file, "\n");
         end
         $fclose (file);
 end
@@ -87,7 +88,7 @@ end
 task compare;
 	integer i;
 	begin
-		for (i = 0; i < OFM_SIZE * OFM_SIZE * NO_FILTER; i = i + 1) begin
+		for (i = 0; i < OFM_SIZE_POOLING * OFM_SIZE_POOLING * NO_FILTER; i = i + 1) begin
 			$display (" matrix ofm RTL : %d", dut.dpram_ofm.mem[i]);
 			$display (" matrix golden : %d", ofm_golden[i]);
 			if (ofm_golden[i] != dut.dpram_ofm.mem[i]) begin

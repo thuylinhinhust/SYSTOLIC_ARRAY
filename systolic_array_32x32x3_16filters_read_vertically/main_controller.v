@@ -9,21 +9,27 @@ module main_controller #(
     input                              clk                                  , 
     input                              rst_n                                ,
     input                              start                                ,
-    input                              addr_valid                           ,
+    input      [4:0]                   wgt_size                             ,       
     output reg                         load_ifm, load_wgt                   ,
     output reg                         ifm_demux, ifm_mux                   ,
     output reg                         ifm_RF_shift_en_1, ifm_RF_shift_en_2 ,
     output reg [SYSTOLIC_SIZE - 1 : 0] wgt_RF_shift_en                      ,
     output reg                         select_wgt                           ,
     output reg                         reset_pe                             ,
-    output reg                         write_out_en                         ,
+    output reg                         write_out_pe_en                      ,
+    output reg                         write_ofm_en                         ,
+    output reg [6:0]                   count_filter                         ,
+    output reg                         fifo_rd_clr                          ,
+    output reg                         fifo_wr_clr                          ,
+    output reg                         fifo_rd_en                           ,
+    output reg                         fifo_wr_en                           ,
     output reg                         done
 );
 
     localparam NO_CYCLE_LOAD      = KERNEL_SIZE * KERNEL_SIZE * IFM_CHANNEL;
     localparam NO_CYCLE_COMPUTE   = NO_CYCLE_LOAD + SYSTOLIC_SIZE*2 - 1;
     localparam NO_LOAD_FILTER     = (NO_FILTER + SYSTOLIC_SIZE - 1) / SYSTOLIC_SIZE;
-    localparam NO_TILING_PER_LINE = IFM_SIZE / SYSTOLIC_SIZE;
+    localparam NO_TILING_PER_LINE = (OFM_SIZE  + SYSTOLIC_SIZE - 1) / SYSTOLIC_SIZE;
     localparam NO_TILING          = NO_TILING_PER_LINE * OFM_SIZE;
 
     parameter IDLE               = 3'b000 ;
@@ -40,7 +46,8 @@ module main_controller #(
     reg [12:0] count_compute_2 ;
     reg [4 :0] count_write     ;
     reg [13:0] count_tiling    ;
-    reg [6 :0] count_filter    ;
+
+    reg sel_write_out;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) current_state <= IDLE;
@@ -50,10 +57,10 @@ module main_controller #(
     always @(*) begin
         case (current_state)
             IDLE:               if (start)                                             next_state = LOAD_WEIGHT;
-            LOAD_WEIGHT:        if (count_load == NO_CYCLE_LOAD )                      next_state = LOAD_COMPUTE;
+            LOAD_WEIGHT:        if (count_load == NO_CYCLE_LOAD + 2)                   next_state = LOAD_COMPUTE;
             LOAD_COMPUTE:       if (count_compute_1 == NO_CYCLE_COMPUTE + 1)           next_state = LOAD_COMPUTE_WRITE;
-            LOAD_COMPUTE_WRITE: if (count_tiling == NO_TILING && count_compute_2 == 0) next_state = COMPUTE_WRITE; //414*26=10764, 32*2=64
-            COMPUTE_WRITE:      if (count_compute_1 == NO_CYCLE_COMPUTE +1)            next_state = WRITE;
+            LOAD_COMPUTE_WRITE: if (count_tiling == NO_TILING && count_compute_2 == 0) next_state = COMPUTE_WRITE;   //414*26=10764, 32*2=64
+            COMPUTE_WRITE:      if (count_compute_1 == NO_CYCLE_COMPUTE + 1)           next_state = WRITE;
             WRITE: begin 
                 if      (count_write == SYSTOLIC_SIZE + 1 && count_filter < NO_LOAD_FILTER) next_state = LOAD_WEIGHT;
                 else if (count_write == SYSTOLIC_SIZE + 1)                                  next_state = IDLE;
@@ -66,23 +73,29 @@ module main_controller #(
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            count_load        <= 0 ;
-            count_compute_1   <= 0 ;
-            count_compute_2   <= 0 ;
-            count_write       <= 0 ;
-            count_tiling      <= 0 ;
-            count_filter      <= 0 ;
-            load_ifm          <= 0 ;
-            load_wgt          <= 0 ;
-            ifm_demux         <= 0 ;
-            ifm_mux           <= 1 ;
-            ifm_RF_shift_en_1 <= 0 ;
-            ifm_RF_shift_en_2 <= 0 ;
-            wgt_RF_shift_en   <= 0 ;
-            select_wgt        <= 1 ;
-            reset_pe          <= 0 ;
-            write_out_en      <= 0 ;
-            done              <= 0 ; 
+                    count_load        <= 0 ;
+                    count_compute_1   <= 0 ;
+                    count_compute_2   <= 0 ;
+                    count_write       <= 0 ;
+                    count_tiling      <= 0 ;
+                    count_filter      <= 0 ;
+                    sel_write_out     <= 0 ;
+                    load_ifm          <= 0 ;
+                    load_wgt          <= 0 ;
+                    ifm_demux         <= 0 ;
+                    ifm_mux           <= 1 ;
+                    ifm_RF_shift_en_1 <= 0 ;
+                    ifm_RF_shift_en_2 <= 0 ;
+                    wgt_RF_shift_en   <= 0 ;
+                    select_wgt        <= 1 ;
+                    reset_pe          <= 0 ;
+                    write_out_pe_en   <= 0 ;
+                    write_ofm_en      <= 0 ;
+                    fifo_rd_clr       <= 1 ;
+                    fifo_wr_clr       <= 1 ;
+                    fifo_rd_en        <= 0 ;
+                    fifo_wr_en        <= 0 ;
+                    done              <= 0 ; 
         end
         else begin
             case (next_state)
@@ -93,6 +106,7 @@ module main_controller #(
                     count_write       <= 0 ;
                     count_tiling      <= 0 ;
                     count_filter      <= 0 ;
+                    sel_write_out     <= 0 ;
                     load_ifm          <= 0 ;
                     load_wgt          <= 0 ;
                     ifm_demux         <= 0 ;
@@ -102,15 +116,21 @@ module main_controller #(
                     wgt_RF_shift_en   <= 0 ;
                     select_wgt        <= 1 ;
                     reset_pe          <= 0 ;
-                    write_out_en      <= 0 ;
+                    write_out_pe_en   <= 0 ;
+                    write_ofm_en      <= 0 ;
+                    fifo_rd_clr       <= 1 ;
+                    fifo_wr_clr       <= 1 ;
+                    fifo_rd_en        <= 0 ;
+                    fifo_wr_en        <= 0 ;
                     done              <= 0 ;
                 end 
                 LOAD_WEIGHT: begin
-                    count_write  <= 0;
+                    count_write   <= 0;
 
-                    count_load   <= (addr_valid) ? count_load + 1 : count_load;
-                    count_tiling <= (count_load == NO_CYCLE_LOAD - 1) ? count_tiling + 1 : count_tiling;
-                    count_filter <= (count_load == NO_CYCLE_LOAD - 1) ? count_filter + 1 : count_filter;
+                    count_load    <= count_load + 1;
+                    count_tiling  <= (count_load == NO_CYCLE_LOAD - 1) ? count_tiling + 1 : count_tiling;
+                    count_filter  <= (count_load == NO_CYCLE_LOAD - 1) ? count_filter + 1 : count_filter;
+                    sel_write_out <= 0 ;
                     
                     load_ifm          <= 1 ;
                     load_wgt          <= (count_load < NO_CYCLE_LOAD - 1) ? 1 : 0 ;
@@ -121,7 +141,12 @@ module main_controller #(
                     wgt_RF_shift_en   <= {SYSTOLIC_SIZE{1'b1}};
                     select_wgt        <= 1 ;
                     reset_pe          <= 0 ;
-                    write_out_en      <= 0 ;
+                    write_out_pe_en   <= 0 ;
+                    write_ofm_en      <= 0 ;
+                    fifo_rd_clr       <= 1 ;
+                    fifo_wr_clr       <= 1 ;
+                    fifo_rd_en        <= 0 ;
+                    fifo_wr_en        <= 0 ;
                     done              <= 0 ;
                 end
                 LOAD_COMPUTE: begin
@@ -129,28 +154,35 @@ module main_controller #(
 
                     count_compute_1 <= count_compute_1 + 1;
                     count_tiling    <= (count_compute_1 == NO_CYCLE_LOAD - 1) ? count_tiling + 1 : count_tiling;
+                    sel_write_out   <= 0 ;
 
                     load_ifm          <= (count_compute_1 <= NO_CYCLE_LOAD - 1) ? 1 : 0;
                     load_wgt          <= 0 ;
                     ifm_demux         <= 1 ;
                     ifm_mux           <= 0 ;
                     ifm_RF_shift_en_1 <= 1 ;
-                    ifm_RF_shift_en_2 <= (count_compute_1 <= NO_CYCLE_LOAD) ? 1 : 0;
+                    ifm_RF_shift_en_2 <= (count_compute_1 <= NO_CYCLE_LOAD + 1) ? 1 : 0;
 
                     for (i = 0; i < SYSTOLIC_SIZE; i = i + 1) begin
                         wgt_RF_shift_en[i] <= (count_compute_1 >= i && count_compute_1 < NO_CYCLE_LOAD + i) ? 1 : 0 ;
                     end
                     
-                    select_wgt   <= 0;
-                    reset_pe     <= (count_compute_1 == NO_CYCLE_COMPUTE) ? 1 : 0;
-                    write_out_en <= 0;
-                    done         <= 0;
+                    select_wgt      <= 0;
+                    reset_pe        <= (count_compute_1 == NO_CYCLE_COMPUTE) ? 1 : 0;
+                    write_out_pe_en <= 0;
+                    write_ofm_en    <= 0 ;
+                    fifo_rd_clr     <= 1 ;
+                    fifo_wr_clr     <= 1 ;
+                    fifo_rd_en      <= 0 ;
+                    fifo_wr_en      <= 0 ;
+                    done            <= 0;
                 end
                 LOAD_COMPUTE_WRITE: begin
                     count_compute_1 <= 0;
 
                     count_compute_2 <= (count_compute_2 == NO_CYCLE_COMPUTE) ? 0 : count_compute_2 + 1;
                     count_tiling    <= (count_compute_2 == NO_CYCLE_LOAD - 1 ) ? count_tiling + 1 : count_tiling;
+                    sel_write_out   <= (count_compute_2 == NO_CYCLE_COMPUTE - 1) ? ~sel_write_out : sel_write_out;
 
                     load_ifm          <= (count_compute_2 <= NO_CYCLE_LOAD - 1) ? 1 : 0;
                     load_wgt          <= 0;
@@ -163,16 +195,22 @@ module main_controller #(
                         wgt_RF_shift_en[i] <= (count_compute_2 >= i && count_compute_2 < NO_CYCLE_LOAD + i) ? 1 : 0 ;
                     end
 
-                    select_wgt   <= 0;
-                    reset_pe     <= (count_compute_2 == NO_CYCLE_COMPUTE) ? 1 : 0;
-                    write_out_en <= (count_compute_2 <= SYSTOLIC_SIZE - 1) ? 1 : 0;
-                    done         <= 0;
+                    select_wgt      <= 0;
+                    reset_pe        <= (count_compute_2 == NO_CYCLE_COMPUTE) ? 1 : 0;
+                    write_out_pe_en <= (count_compute_2 <= wgt_size - 1) ? 1 : 0;
+                    write_ofm_en    <= ((count_compute_2 <= wgt_size - 1) && (sel_write_out == 1)) ? 1 : 0 ;
+                    fifo_rd_clr     <= ((count_compute_2 <= wgt_size - 1 || count_compute_2 == NO_CYCLE_COMPUTE) && (sel_write_out == 1)) ? 0 : 1 ;
+                    fifo_wr_clr     <= ((count_compute_2 <= wgt_size - 1) && (sel_write_out == 0)) ? 0 : 1 ;
+                    fifo_rd_en      <= ((count_compute_2 <= wgt_size - 1 || count_compute_2 == NO_CYCLE_COMPUTE) && (sel_write_out == 1)) ? 1 : 0 ;
+                    fifo_wr_en      <= ((count_compute_2 <= wgt_size - 1) && (sel_write_out == 0)) ? 1 : 0 ; //remove (count_ofm_height % 2 == 0) if stride maxpool = 1
+                    done            <= 0;
                 end
                 COMPUTE_WRITE: begin
                     count_compute_2 <= 0 ;
                     count_tiling    <= 0 ;
 
                     count_compute_1 <= count_compute_1 + 1;
+                    sel_write_out   <= (count_compute_1 == NO_CYCLE_COMPUTE - 1) ? ~sel_write_out : sel_write_out;
 
                     load_ifm          <= 0 ;
                     load_wgt          <= 0 ;
@@ -185,14 +223,20 @@ module main_controller #(
                         wgt_RF_shift_en[i] <= (count_compute_1 >= i && count_compute_1 < NO_CYCLE_LOAD + i) ? 1 : 0 ;
                     end
 
-                    select_wgt   <= 0;
-                    reset_pe     <= 0;
-                    write_out_en <= (count_compute_1 <= SYSTOLIC_SIZE - 1) ? 1 : 0;
-                    done         <= 0;
+                    select_wgt      <= 0;
+                    reset_pe        <= 0;
+                    write_out_pe_en <= (count_compute_1 <= wgt_size - 1) ? 1 : 0;
+                    write_ofm_en    <= ((count_compute_1 <= wgt_size - 1) && (sel_write_out == 1)) ? 1 : 0 ;
+                    fifo_rd_clr     <= ((count_compute_1 <= wgt_size - 1 || count_compute_1 == NO_CYCLE_COMPUTE) && (sel_write_out == 1)) ? 0 : 1 ;
+                    fifo_wr_clr     <= ((count_compute_1 <= wgt_size - 1) && (sel_write_out == 0)) ? 0 : 1 ;
+                    fifo_rd_en      <= ((count_compute_1 <= wgt_size - 1 || count_compute_1 == NO_CYCLE_COMPUTE) && (sel_write_out == 1)) ? 1 : 0 ;
+                    fifo_wr_en      <= ((count_compute_1 <= wgt_size - 1) && (sel_write_out == 0)) ? 1 : 0 ;
+                    done            <= 0;
                 end
                 WRITE: begin
                     count_compute_1 <= 0;
                     count_write     <= count_write + 1;
+                    //sel_write_out   <= (count_write == 0) ? ~sel_write_out : sel_write_out;
 
                     load_ifm          <= 0 ;
                     load_wgt          <= 0 ;
@@ -203,7 +247,12 @@ module main_controller #(
                     wgt_RF_shift_en   <= 0 ;
                     select_wgt        <= 0 ;
                     reset_pe          <= 1 ;
-                    write_out_en      <= 1 ;
+                    write_out_pe_en   <= (count_write <= wgt_size - 1) ? 1 : 0 ;
+                    write_ofm_en      <= ((count_write <= wgt_size - 1) && (sel_write_out == 1)) ? 1 : 0 ;
+                    fifo_rd_clr       <= ((count_write <= wgt_size - 1 || count_compute_1 == NO_CYCLE_COMPUTE + 1) && (sel_write_out == 1)) ? 0 : 1 ;
+                    fifo_wr_clr       <= ((count_write <= wgt_size - 1) && (sel_write_out == 0)) ? 0 : 1 ;
+                    fifo_rd_en        <= ((count_write <= wgt_size - 1 || count_compute_1 == NO_CYCLE_COMPUTE + 1) && (sel_write_out == 1)) ? 1 : 0 ;
+                    fifo_wr_en        <= ((count_write <= wgt_size - 1) && (sel_write_out == 0)) ? 1 : 0 ;
                     if (count_write == SYSTOLIC_SIZE && count_filter == NO_LOAD_FILTER) done <= 1;
                 end
             endcase

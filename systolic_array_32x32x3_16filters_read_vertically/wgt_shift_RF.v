@@ -1,4 +1,7 @@
-module wgt_shift_RF #(parameter DATA_WIDTH = 8, BUFFER_SIZE = 27) (
+module wgt_shift_RF #(
+	parameter DATA_WIDTH  = 8 , 
+	parameter BUFFER_SIZE = 27
+) (
 	input                           clk             ,
 	input                           rst_n           ,
 	input                           select_wgt      ,

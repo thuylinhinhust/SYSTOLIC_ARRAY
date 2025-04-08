@@ -1,4 +1,7 @@
-module PE_array #(parameter DATA_WIDTH = 8, SYSTOLIC_SIZE = 16) (
+module PE_array #(
+    parameter DATA_WIDTH    = 8  , 
+    parameter SYSTOLIC_SIZE = 16
+) (
     input                                         clk          ,
     input                                         rst_n        ,
     input                                         reset_pe     ,

@@ -1,10 +1,11 @@
-module ifm_shift_RF #(parameter DATA_WIDTH = 8, BUFFER_SIZE = 27) (
+module ifm_shift_RF #(
+    parameter DATA_WIDTH  = 8  , 
+    parameter BUFFER_SIZE = 27
+) (
 	input                           clk               ,
 	input                           rst_n             ,
     input                           ifm_demux         ,
 	input                           ifm_mux           ,
-    input                           ifm1_mux          ,
-    input                           ifm2_mux          , 
     input                           ifm_RF_shift_en_1 ,
     input                           ifm_RF_shift_en_2 ,    
 	input      [DATA_WIDTH - 1 : 0] data_in           ,
@@ -30,8 +31,8 @@ module ifm_shift_RF #(parameter DATA_WIDTH = 8, BUFFER_SIZE = 27) (
                 buffer_1[i] <= (ifm_RF_shift_en_1) ? buffer_1[i-1] : buffer_1[i];
                 buffer_2[i] <= (ifm_RF_shift_en_2) ? buffer_2[i-1] : buffer_2[i];
             end
-            buffer_1[0] <= (ifm_RF_shift_en_1) ? ((ifm1_mux) ? buffer_2[BUFFER_SIZE - 1] : ((ifm_demux == 0) ? data_in : 0 )) : buffer_1[0];
-            buffer_2[0] <= (ifm_RF_shift_en_2) ? ((ifm2_mux) ? buffer_1[BUFFER_SIZE - 1] : ((ifm_demux == 1) ? data_in : 0 )) : buffer_2[0];
+            buffer_1[0] <= (ifm_RF_shift_en_1) ? ((ifm_demux == 0) ? data_in : 0) : buffer_1[0];
+            buffer_2[0] <= (ifm_RF_shift_en_2) ? ((ifm_demux == 1) ? data_in : 0) : buffer_2[0];
         end 
     end
 

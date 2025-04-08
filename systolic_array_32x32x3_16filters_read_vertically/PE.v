@@ -1,4 +1,6 @@
-module PE #(parameter DATA_WIDTH = 8) (
+module PE #(
+	parameter DATA_WIDTH = 8
+) (
 	input                             clk          ,
 	input                             rst_n        ,
 	input                             reset_pe     ,
